@@ -7,6 +7,8 @@
 #' @importFrom stringr str_trim str_sub
 #' @importFrom readr read_csv
 #' @importFrom tidyselect contains
+#' @importFrom rstudioapi askForPassword
+#' @importFrom httr GET build_url parse_url content status_code
 NULL
 
 #' Imputation of all marks via leave one out prediction of each student
