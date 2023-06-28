@@ -2,7 +2,7 @@
 % Please edit documentation in R/helpers.R
 \name{grade_category}
 \alias{grade_category}
-\title{Computes the grade category (A, B, C, F, DC) for a vector of grades}
+\title{Computes the grade category (A, B, C, F, DC, NF) for a vector of grades}
 \usage{
 grade_category(grades)
 }
@@ -13,5 +13,5 @@ grade_category(grades)
 a factor variable with grade categories
 }
 \description{
-Computes the grade category (A, B, C, F, DC) for a vector of grades
+Computes the grade category (A, B, C, F, DC, NF) for a vector of grades
 }
