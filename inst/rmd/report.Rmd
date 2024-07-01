@@ -1,0 +1,302 @@
+---
+output: html_document
+params: 
+    paper: "161323"
+    semester: "S1FS"
+    year: "2024"
+    p_lim: 0.2
+title: "`r params$paper` grade review"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(glue)
+library(masseygrading)
+
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE, out.width='90%', fig.align='center')
+theme_set(theme_minimal())
+```
+
+```{r read_data}
+if (0) {
+  credentials <- get_credentials(params$user, params$pass)
+  sms_url <- masseygrading::get_url_for_sms(paper=params$paper,
+                                            year=params$year,
+                                            semester=params$semester)
+  sms_url
+  sms <- download_from_sms(paper=params$paper,
+                           year=params$year,
+                           semester=params$semester,
+                           credentials=credentials)
+} else {
+  csv_file <- file.path(params$year, params$semester, paste0(params$paper, ".csv"))
+  sms <- read_sms_reporting_csv(csv_file)
+}
+info <- extract_paper_information(sms)
+cos_pass <- cos_pass_guidelines(info$level)
+cos_props <- cos_grade_guidelines(info$level)
+```
+
+## `r paste(info$paper, info$year, info$semester)`
+
+#### Grade review at `r Sys.Date()`
+
+This report highlights the grade distribution for `r info$paper` delivered in `r info$semester`, `r info$year`.
+
+Overall there were `r info$students` students enrolled. A summary of the results by mode is in the table below. For a `r info$level` level course it's recommended that the pass rate is between `r cos_pass$min` and `r cos_pass$max`.
+
+```{r overview}
+sms |> select(student_id, mode, grade=agreed_overall_grade) |>
+  unique() |>
+  mutate(grade_cat = grade_category(grade)) |>
+  group_by(Mode=mode) |>
+  summarise(Students = n(), Graded = sum(grade_cat != "DC"),
+            Passing = sum(grade_cat %in% c("A", "B", "C")),
+            A = sum(grade_cat == "A"),
+            B = sum(grade_cat == "B"),
+            C = sum(grade_cat == "C")) |>
+  ungroup() |>
+  janitor::adorn_totals() |>
+  mutate(across(A:C, ~round(./Passing*100)),
+         Passing = round(Passing/Graded*100)) |>
+  knitr::kable()
+```
+
+## Overall mark distribution
+
+The proportions of A's, B's and C's among passing students is below, along with the respective college guidelines (dotted). These are just guidance. If the course coordinator feels that a distribution of grades outside these guidelines is appropriate for the class (e.g. a higher proportion of A's) then that is possible.
+
+```{r grade_distribution}
+sms |> select(student_id, agreed_overall_mark, agreed_overall_grade) |>
+  unique() |> count(agreed_overall_grade) |>
+  mutate(grade_cat = grade_category(agreed_overall_grade)) |>
+  filter(grade_cat %in% c('A', 'B', 'C')) |>
+  mutate(prop = n/sum(n)) |>
+  group_by(grade_cat) |> arrange(desc(agreed_overall_grade)) |> mutate(prop_cumm = cumsum(prop) - prop/2) |>
+  ggplot() +
+  geom_col(mapping=aes(x=grade_cat, y=prop, fill=agreed_overall_grade)) +
+  geom_text(mapping=aes(x=grade_cat, y=prop_cumm, label=agreed_overall_grade)) +
+  geom_rect(data=cos_props, mapping=aes(xmin=1:3-0.45, ymin=min/100, ymax=max/100, xmax=1:3+0.45), fill=NA, col='black', linetype='dotted', linewidth=0.4) +
+  guides(fill='none') +
+  scale_y_continuous(labels=scales::label_percent()) +
+  labs(x = NULL, y = NULL)
+```
+
+## Grade break points
+
+The below chart plots students against their final mark, coloured by grade to assess whether similarly
+marked students receive the same grade.
+
+```{r grade_breakpoints}
+sms |> select(student_id, agreed_overall_mark, agreed_overall_grade) |>
+  unique() |>
+  mutate(grade_cat = grade_category(agreed_overall_grade)) |>
+  arrange(agreed_overall_mark) |> mutate(rank = row_number()) |>
+  filter(!grade_cat %in% c("F", "DC")) |>
+  ggplot() +
+  geom_point(aes(x=agreed_overall_mark, y=rank, fill=agreed_overall_grade), shape=21, size=2, stroke=0.3) +
+  scale_fill_brewer(type="qual", palette="Set1") +
+  labs(y="Students", x="Mark") +
+  guides(fill='none')
+```
+
+## Potential SMS entry issues
+
+### 0 E in place of 0 MA/MC
+
+Typically, a missed assignment/test/exam should be entered as 0 MA (or 0 MC for exam) rather than 0 E. 0 E is still possible (students could hand in work but score a 0) but unlikely. It appears that marks missing in stream (i.e. missing assessment) can on occasion be translated to a 0 E in SMS without human intervention.
+
+```{r zero_e}
+zero_E = sms |> filter(mark == 0, grade == "E", !(agreed_overall_grade %in% c("WD", "DC"))) |>
+  select(student_id, surname, firstname, mode, number, type, mark, grade, agreed_overall_mark, agreed_overall_grade)
+
+has_zero_E = nrow(zero_E) > 0
+
+msg_zero_E = if (has_zero_E) {
+  "The following should be fixed if they are not true zeros."
+} else {
+  "There are no zero marks graded as E."
+}
+```
+
+`r msg_zero_E`
+
+```{r zero_e_table, eval=has_zero_E}
+zero_E |> knitr::kable()
+```
+
+### DC for an assessment item
+
+Typically, a missed assignment/test/exam should be entered as 0 MA (or 0 MC for exam) rather than 0 DC.
+
+```{r dc}
+dc = sms |> filter(grade == "DC", !(overall_grade %in% c("DC", "WD")))  |>
+  select(student_id, surname, firstname, mode, number, type, mark, grade, agreed_overall_mark, agreed_overall_grade)
+
+has_dc = nrow(dc) > 0
+
+msg_dc = if (has_dc) {
+  "The following should be fixed."
+} else {
+  "There are no assessments graded as DC."
+}
+```
+
+`r msg_dc`
+
+```{r dc_table, eval=has_dc}
+dc |> knitr::kable()
+```
+
+### Actual and Agreed mark disagree for an assessment
+
+These could indicate some sort of error, but more likely will be the result of impaired performance or aegrotat. They should have a minute added in SMS.
+
+```{r agreed_assessment}
+agree_ass_differ = sms |> filter(mark != agreed_mark |
+               grade != agreed_grade,
+               !(overall_grade %in% c("WD", "DC"))) |>
+  select(student_id, mode, number, type, mark, grade, agreed_mark, agreed_grade, minutes)
+
+has_agree_ass_differ = nrow(agree_ass_differ) > 0
+
+msg_agree_ass_differ = if (has_agree_ass_differ) {
+  "Ensure the following has an appropriate minute from SMS."
+} else {
+  "There are no assessments where the agreed mark/grade differs from the actual mark/grade."
+}
+```
+
+`r msg_agree_ass_differ`
+
+```{r agreed_assessment_table, eval=has_agree_ass_differ}
+agree_ass_differ |> knitr::kable()
+```
+
+### Overall grades or marks disagree with agreed grades or marks
+
+This can happen in the case of impaired performance or aegrotat. There should be a minute added in that case.
+
+```{r agreed_overall}
+# Students with >50% missing assessment also DC, but SMS does not count this properly, so filter out here.
+dnc <- sms |> group_by(student_id) |> filter(weight != 0) |>
+  summarise(dc = sum((grade == "MA")*weight) > 50) |>
+  filter(dc)
+
+agree_differ = sms |> select(student_id, surname, firstname, mode, overall_mark, overall_grade, agreed_overall_grade, agreed_overall_mark, minutes) |> unique() |>
+  filter(overall_mark != agreed_overall_mark |
+         overall_grade != agreed_overall_grade) |>
+  anti_join(dnc)
+
+has_agree_differ = nrow(agree_differ) > 0
+
+msg_agree_differ = if (has_agree_differ) {
+  "Ensure the following have an appropriate minute from SMS."
+} else {
+  "There are no students where the overall agreed mark/grade differs from the overall actual mark/grade."
+}
+```
+
+`r msg_agree_differ`
+
+```{r agreed_overall_table, eval=has_agree_differ}
+agree_differ |> knitr::kable()
+```
+
+### Students with >50% missing assessment should DC
+
+SMS correctly calculates a DC grade for those that miss a compolsory assessment, but currently grants an E grade in the case of missing more than 50% of non-compolsory assessment. This needs to be manually overridden by specifying DC for the agreed overall grade.
+
+```{r dnc_students}
+dnc <- sms |> group_by(student_id) |> filter(weight != 0) |>
+  summarise(dc = sum((grade == "MA")*weight) > 50) |>
+  filter(dc)
+
+should_be_dc <- sms |> select(student_id, surname, firstname, mode, overall_mark, overall_grade, agreed_overall_grade, agreed_overall_mark, minutes) |> unique() |>
+  filter(agreed_overall_grade != "DC") |>
+  semi_join(dnc)
+
+has_should_be_dc = nrow(should_be_dc) > 0
+
+msg_should_be_dc = if (has_should_be_dc) {
+  "Ensure the following students are fixed in SMS."
+} else {
+  "There are no students where the >50% of assessment is missed and DC is not the final agreed grade."
+}
+```
+
+`r msg_should_be_dc`
+
+```{r dnc_students_table, eval=has_should_be_dc}
+should_be_dc |> knitr::kable()
+```
+
+### Scaling
+
+```{r scaling}
+scaling_used <- sms |> group_by(student_id) |>
+  filter(!overall_grade %in% c("WD", "DC")) |>
+  filter(weight != 0) |>
+  summarise(check_mark = sum(mark * weight/100),
+            overall_mark = first(overall_mark)) |>
+  filter(round_mark(check_mark) != overall_mark) |> nrow() > 0
+
+scale_msg <- if(scaling_used) {
+  "Scaling was used. The overall marks are not derived solely from a weighted average of assessments."
+  } else {
+  "No scaling was used. Overall marks are computed from a weighted average of assessments."
+}
+```
+
+`r scale_msg`
+
+```{r scaling_chart, eval=scaling_used}
+sms |> group_by(student_id) |>
+  filter(!overall_grade %in% c("WD", "DC")) |>
+  summarise(check_mark = sum(mark * weight/100),
+            overall_mark = first(overall_mark),
+            overall_grade = first(overall_grade)) |>
+  ggplot() +
+  geom_segment(mapping=aes(x=check_mark, y=overall_mark, xend=check_mark, yend=check_mark),
+               linewidth=0.5, col='grey50') +
+  geom_point(mapping=aes(x=check_mark, y=overall_mark), col='black', size=2) +
+  geom_point(mapping=aes(x=check_mark, y=overall_mark, col=overall_grade)) +
+  scale_color_brewer(type="qual", palette="Set1") +
+  labs(x = "Actual mark", y = "Scaled mark", title="Scaled versus actual marks") +
+  guides(col='none')
+```
+
+## Inconsistent marks
+
+Sometimes students do particularly well, or particularly poorly on an assessment compared to the rest of their grades. This could indicate an error in transfer of marks to SMS, so perhaps warrants additional exploration.
+
+**NOTE: We don't have to do anything about this - this is just in case something seems fishy.**
+
+```{r inconsistent_marks}
+marks <- sms |> filter(overall_grade != "WD") |>
+  select(student_id, number, mark, grade) |>
+  mutate(mark = if_else(grade %in% c("MA", "MC"), NA_real_, mark)) |>
+  select(-grade) |>
+  pivot_wider(names_from=number, values_from=mark, names_prefix='assessment')
+pred <- impute_all_marks(marks) |>
+  filter(P < params$p_lim)
+
+pred_msg <- if (nrow(pred) > 0) {
+  glue("Any adjusted P less than {params$p_lim} is presented below.")
+} else {
+  glue("There are no observations with adjusted P less than {params$p_lim}.")
+}
+```
+
+We impute each mark for each student using a leave-one-out linear model prediction from the remaining grades. We then compute the probability of observing the student's result or something more extreme (P-value) given the model and adjust these for false discovery rate.
+
+`r pred_msg`
+
+```{r inconsistent_marks_table, eval=nrow(pred) > 0}
+pred |> left_join(sms |> select(student_id, surname, firstname, number, type, grade) |> mutate(assessment = glue("assessment{number}"))) |>
+  filter(!is.na(grade)) |>
+  select(student_id, surname, firstname, number, type, grade, mark, predicted, P) |>
+  arrange(P) |>
+  mutate(P = scales::pvalue(P), predicted=round(predicted, 2)) |>
+  knitr::kable()
+```
