@@ -14,7 +14,7 @@ get_credentials <- function(user=NULL, pass=NULL) {
   list(user = user, pass = pass)
 }
 
-#' Download raw grades from SMS reporting
+#' Get URL for SMS reporting for a paper
 #'
 #' @seealso `read_sms_reporting`, `parse_sms_reporting`
 #'
@@ -22,10 +22,10 @@ get_credentials <- function(user=NULL, pass=NULL) {
 #' @param year the year to download
 #' @param semester the semester to download
 #' @param location the location to download, defaults to "ALL". Other values are "MTUI", "AKLI", "DISD"
-#' @param credentials the credentials from `get_credentials`.
 #'
-#' @return The raw marks.
-download_raw_from_sms <- function(paper, year, semester, location="ALL", credentials) {
+#' @return The URL.
+#' @export
+get_url_for_sms <- function(paper, year, semester, location="ALL") {
   # SMS reporting URL
   # I found the URL by downloading the .atomsvc from the "Export Data Feed" button in the viewer.
   base_url <- httr::parse_url("https://smsreporting.massey.ac.nz/SitsProd/Pages/ReportViewer.aspx?%2fSmsReporting%2fExaminations%20and%20Assessments%2fGrade%20Distribution%20Reports%2fClass%20List%20with%20Marks%20and%20Grades")
@@ -40,7 +40,26 @@ download_raw_from_sms <- function(paper, year, semester, location="ALL", credent
   url <- httr::build_url(base_url)
   url <- stringr::str_replace_all(url, "Grades=", "Grades")
 
-  response <- httr::GET(url, httr::authenticate(credentials$user,
+  url
+}
+
+#' Download raw grades from SMS reporting
+#'
+#' @seealso `read_sms_reporting`, `parse_sms_reporting`
+#'
+#' @param paper the paper to download
+#' @param year the year to download
+#' @param semester the semester to download
+#' @param location the location to download, defaults to "ALL". Other values are "MTUI", "AKLI", "DISD"
+#' @param credentials the credentials from `get_credentials`.
+#'
+#' @return The raw marks.
+download_raw_from_sms <- function(paper, year, semester, location="ALL", credentials) {
+  # SMS reporting URL
+  url <- get_url_for_sms(paper, year, semester, location)
+
+  # fetch URL
+  response <- httr::GET(url, httr::verbose(), httr::authenticate(credentials$user,
                                     credentials$pass,
                                     "ntlm"))
   if (httr::status_code(response) == 200) {
