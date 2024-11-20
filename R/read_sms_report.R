@@ -74,7 +74,7 @@ extract_paper_information <- function(data) {
     as.list()
 
   info$level = year_level * 100
-  info$students = sms |>
+  info$students = data |>
     dplyr::summarise(n=dplyr::n_distinct(student_id)) |>
     dplyr::pull(n)
 
