@@ -28,7 +28,8 @@ get_credentials <- function(user=NULL, pass=NULL) {
 get_url_for_sms <- function(paper, year, semester, location="ALL") {
   # SMS reporting URL
   # I found the URL by downloading the .atomsvc from the "Export Data Feed" button in the viewer.
-  base_url <- httr::parse_url("https://smsreporting.massey.ac.nz/SitsProd/Pages/ReportViewer.aspx?%2fSmsReporting%2fExaminations%20and%20Assessments%2fGrade%20Distribution%20Reports%2fClass%20List%20with%20Marks%20and%20Grades")
+
+  base_url <- httr::parse_url("https://smsreporting.massey.ac.nz:443/SitsProd?%2fSmsReporting%2fExaminations%20and%20Assessments%2fGrade%20Distribution%20Reports%2fClass%20List%20with%20Marks%20and%20Grades")
   base_url$query = c(base_url$query,
                      Academic_Year = year,
                      Course = paper,
@@ -59,9 +60,10 @@ download_raw_from_sms <- function(paper, year, semester, location="ALL", credent
   url <- get_url_for_sms(paper, year, semester, location)
 
   # fetch URL
-  response <- httr::GET(url, httr::verbose(), httr::authenticate(credentials$user,
+  response <- httr::GET(url, httr::authenticate(credentials$user,
                                     credentials$pass,
-                                    "ntlm"))
+                                    "ntlm"),
+                        httr::verbose(data_in = TRUE, info=TRUE, ssl=TRUE))
   if (httr::status_code(response) == 200) {
     httr::content(response, show_col_types=FALSE)
   } else {
