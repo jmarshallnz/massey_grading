@@ -31,7 +31,7 @@ parse_raw_sms_data <- function(raw_sms) {
                    convert = TRUE) |>
     tidyr::extract(paper,
                    into=c("paper", "mode", "year", "semester"),
-                   regex="(.*) ?(AKLB|AKLI|DISD|MTUI) ([0-9]+) (.*)") |>
+                   regex="(.*) ?(AKLB|AKLI|DISD|MTUI|PSBI) ([0-9]+) (.*)") |>
     dplyr::mutate(paper = stringr::str_trim(paper)) |>
     dplyr::mutate(dplyr::across(tidyselect::contains('grade'), grade_factor))
 }
