@@ -3,7 +3,11 @@
 #' @return a factor variable ordered appropriately
 #' @export
 grade_factor <- function(grades) {
-  factor(grades, levels=c("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "E", "MA", "F", "DC", "AG", "WD", "NF"))
+  level_list <- c("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "E", "MA", "F", "DC", "AG", "WD", "WS", "NF")
+  if (!all(grades %in% level_list)) {
+    stop(paste("We have grades that aren't known:", setdiff(grades, level_list), "\n"))
+  }
+  factor(grades, levels=level_list)
 }
 
 #' Computes the grade category (A, B, C, F, DC, NF) for a vector of grades
@@ -13,7 +17,7 @@ grade_factor <- function(grades) {
 grade_category <- function(grades) {
   grade_cat <- dplyr::case_when(
                         grades == "NF" ~ "NF",
-                        grades %in% c("MA", "DC", "WD") ~ "DC",
+                        grades %in% c("MA", "DC", "WD", "WS") ~ "DC",
                         grades %in% c("D", "E") ~ "F",
                         grades == "AG" ~ "C",
                         TRUE ~ stringr::str_sub(grades, 1, 1)
