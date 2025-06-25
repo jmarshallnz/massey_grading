@@ -3,7 +3,7 @@
 #' @return a factor variable ordered appropriately
 #' @export
 grade_factor <- function(grades) {
-  level_list <- c("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "E", "MA", "MC", "F", "DC", "AG", "WD", "WS", "NF")
+  level_list <- c("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "E", "MA", "MC", "F", "P", "DC", "AG", "WD", "WS", "NF")
   if (!all(grades %in% level_list)) {
     stop(paste("We have grades that aren't known:", setdiff(grades, level_list), "\n"))
   }
@@ -19,7 +19,7 @@ grade_category <- function(grades) {
                         grades == "NF" ~ "NF",
                         grades %in% c("MA", "MC", "DC", "WD", "WS") ~ "DC",
                         grades %in% c("D", "E") ~ "F",
-                        grades == "AG" ~ "C",
+                        grades %in% c("AG", "P") ~ "C",
                         TRUE ~ stringr::str_sub(grades, 1, 1)
                         )
   factor(grade_cat, levels = c("A", "B", "C", "F", "DC", "NF"))
